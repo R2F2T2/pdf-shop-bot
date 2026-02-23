@@ -1,0 +1,8 @@
+.env
+bot_database.db
+test.pdf
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+testing/
