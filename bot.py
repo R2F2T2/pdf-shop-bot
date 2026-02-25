@@ -1,5 +1,5 @@
-import os
 import asyncio
+from config import BOT_TOKEN
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 load_dotenv()
@@ -9,7 +9,7 @@ from handlers import admin, catalog, user, payments
 async def main():
     await db.db_start()
     
-    bot = Bot(token=os.getenv("BOT_TOKEN"))
+    bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
 
     # Подключаем роутеры

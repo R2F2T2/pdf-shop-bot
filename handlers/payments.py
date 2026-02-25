@@ -1,7 +1,7 @@
 from aiogram import Router, F, types
 from aiogram.types import LabeledPrice
+from config import PAYMENT_TOKEN
 import database as db
-import os
 
 router = Router()
 
@@ -31,7 +31,7 @@ async def handle_buy(callback: types.CallbackQuery):
         title=name,
         description=f"Покупка {name}",
         payload=str(p_id),
-        provider_token=os.getenv("PAYMENT_TOKEN"),
+        provider_token=PAYMENT_TOKEN,
         currency="RUB",
         prices=prices,
         start_parameter="pay"

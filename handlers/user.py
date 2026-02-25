@@ -3,17 +3,12 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder,InlineKeyboardButton
 from aiogram.types import LabeledPrice, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.exceptions import TelegramBadRequest # Импортируем исключение
+from config import ADMIN_IDS
 import database as db
-import os
+
 
 router = Router()
-#raw_id = os.getenv("ADMIN_ID")
-#ADMIN_ID = int(raw_id)
-raw_ids = os.getenv("ADMIN_IDS", "")
-print(f"DEBUG: ADMIN_ID is {raw_ids}") # Это покажет, что прочиталось
-# Читаем строку "123,456", делим по запятой и превращаем каждый элемент в int
-ADMIN_IDS = [int(admin_id) for admin_id in raw_ids.split(",") if admin_id]
-# Команда СТАРТ
+
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     await show_main_menu(message)
