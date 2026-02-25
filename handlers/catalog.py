@@ -7,9 +7,12 @@ import database as db
 import os
 
 router = Router()
-raw_id = os.getenv("ADMIN_ID")
-ADMIN_ID = int(raw_id)
-
+#raw_id = os.getenv("ADMIN_ID")
+#ADMIN_ID = int(raw_id)
+raw_ids = os.getenv("ADMIN_IDS", "")
+#print(f"DEBUG: ADMIN_ID is {raw_ids}") # Это покажет, что прочиталось
+# Читаем строку "123,456", делим по запятой и превращаем каждый элемент в int
+ADMIN_IDS = [int(admin_id) for admin_id in raw_ids.split(",") if admin_id]
 #Класс который описывает схему кнопки
 class ProdClick(CallbackData, prefix="p"):
     id: int
@@ -60,7 +63,7 @@ async def show_product_card(event: types.Message | types.CallbackQuery, product_
     user_id = event.from_user.id
     kb = InlineKeyboardBuilder()
 
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         # Кнопки для админа
         kb.row(InlineKeyboardButton(text="📝 Изменить название", callback_data=f"edit_name_{book['id']}"))
         kb.row(InlineKeyboardButton(text="💰 Изменить цену", callback_data=f"edit_price_{book['id']}"))
