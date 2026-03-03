@@ -1,4 +1,14 @@
 from models import DBResult
+from aiogram import types
+from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
+import database as db
+#Создаем логгер
+from config import init_logging
+init_logging()
+import logging
+logger = logging.getLogger(__name__)
+
 async def handle_db_result(result, message, success_handler=None):
     """
     Универсальный обработчик ответов от БД.
@@ -57,3 +67,36 @@ def get_string_data(prod) -> str:
     cat_val = cat.value if hasattr(cat, 'value') else cat
 
     return f"{cat_val} | {prod['name']} | {short_desc} | Цена: {prod['price']} | ID: {short_id}"
+
+
+async def update_bot_interface(message: types.Message, state: FSMContext, new_text: str, reply_markup=None):
+    data = await state.get_data()
+    msg_id = data.get("last_msg_id")
+    
+    # 1. Удаляем сообщение пользователя, чтобы чат был чистым
+    try:
+        await message.delete()
+    except Exception as e:
+        logger.error(f"Не удалось удалить сообщение: {e}")
+
+    # 2. Редактируем сообщение бота
+    try:
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=msg_id,
+            text=new_text,
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" in e.message:
+            # Если текст тот же — просто ничего не делаем, цель достигнута
+            logger.warning(e)
+            return
+        
+        # Если же ошибка другая (сообщение удалено и т.д.), шлем новое
+        logger.warning(f"Редактирование не удалось ({e.message}), отправляем новое.")
+        sent = await message.answer(new_text, reply_markup=reply_markup, parse_mode="HTML")
+        await state.update_data(last_msg_id=sent.message_id)
+    except Exception as e:
+        logger.error(f"Критическая ошибка интерфейса: {e}")

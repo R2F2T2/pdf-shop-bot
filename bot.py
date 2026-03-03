@@ -1,15 +1,15 @@
 import asyncio
-from config import BOT_TOKEN
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
+from config import BOT_TOKEN
 load_dotenv()
 import database as db
-from handlers import admin, catalog, user, payments
-#Создаем логгер
+# Создаем логгер
 from config import init_logging
+from handlers import user, admin, catalog, add_product, payments
 init_logging()
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 async def main():    
     logger.info("Запуск бота...")
@@ -18,7 +18,7 @@ async def main():
     dp = Dispatcher()
     
     # Подключаем роутеры
-    dp.include_routers(admin.router, user.router, payments.router, catalog.router)
+    dp.include_routers(user.router, admin.router, catalog.router, add_product.router, payments.router)
 
     await dp.start_polling(bot)
     logger.info("Бот запущен!")

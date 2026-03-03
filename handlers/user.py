@@ -1,7 +1,6 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder,InlineKeyboardButton
-from aiogram.types import LabeledPrice, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.exceptions import TelegramBadRequest # Импортируем исключение
 from config import ADMIN_IDS
 import database as db
