@@ -1,8 +1,10 @@
 .env
-bot_database.db
+.vscode
+*.db
 test.pdf
 # Кэш Python
 __pycache__/
 *.py[cod]
+*.log
 *$py.class
 testing/

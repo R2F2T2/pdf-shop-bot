@@ -5,13 +5,21 @@ from aiogram.types import LabeledPrice, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.exceptions import TelegramBadRequest # Импортируем исключение
 from config import ADMIN_IDS
 import database as db
-
-
+#Создаем логгер
+from config import init_logging
+init_logging()
+import logging
+logger = logging.getLogger(__name__)
+#----------------------------
 router = Router()
+
+
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
+    logger.info(f"Вход пользователя: {message.from_user.full_name} id: {message.from_user.id}")
     await show_main_menu(message)
+    
 
 # Кнопка НАЗАД (callback_data="main_menu")
 @router.callback_query(F.data == "main_menu")
@@ -24,11 +32,13 @@ async def show_main_menu(event: types.Message | types.CallbackQuery):
     builder = InlineKeyboardBuilder()
 
     if user_id in ADMIN_IDS: #Меню для админа
+        logger.info("Вывод меню администратора")
         builder.row(InlineKeyboardButton(text="➕ Добавить продукт", callback_data="prod_add"))
-        builder.row(InlineKeyboardButton(text="📝 Список (Редактировать)", callback_data="show_catalog"))
+        builder.row(InlineKeyboardButton(text="📝 Список (Редактировать)", callback_data="show_categories"))
         text = "👋 Приветсвую, администратор!"
     else: #Меню для юзера
-        builder.row(InlineKeyboardButton(text="📚 Посмотреть каталог", callback_data="show_catalog"))    
+        logger.info("Вывод меню покупателя")
+        builder.row(InlineKeyboardButton(text="📚 Посмотреть каталог", callback_data="show_categories"))    
         text = "👋 Приветствую Вас в магазине учебных пособий!\nНажмите кнопку ниже, чтобы выбрать продукт:"
 
     kb = builder.as_markup()
@@ -37,8 +47,8 @@ async def show_main_menu(event: types.Message | types.CallbackQuery):
         try:
             # Пытаемся отредактировать
             await event.message.edit_text(text, reply_markup=kb)
-        except TelegramBadRequest:
-            # Если текст и кнопки совпали — просто игнорируем ошибку
+        except TelegramBadRequest as e:
+            logger.warning(f"Не удалось отредактировать предыдущее сообщение бота: {e}")
             pass
     else:
         # Если ввели /start — шлем новое
