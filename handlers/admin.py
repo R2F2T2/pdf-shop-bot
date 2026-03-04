@@ -6,7 +6,7 @@ from utils.states import EditProduct
 from utils.filters import IsAdmin
 from utils.helper import handle_db_result
 from handlers import catalog
-from models import ProdAction, CategoryClick
+from models import ProdAction, CategoryClick, PCategory
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -48,30 +48,43 @@ async def process_edit_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
     p_id = data["edit_id"]
     prop = data["edit_prop"]
+    
+    # 1. Проверяем цену
+    if prop == "price":
+        if message.text.isdigit():
+            if int(message.text)<100:
+                await message.delete()
+                return await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=data["instr_msg_id"],
+                    text="Цена должна быть не менее 100р!\nВведите цену:")            
+        else:
+            await message.delete()
+            return await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=data["instr_msg_id"],
+                    text="Цена должна быть числом!\nВведите цену:")         
 
-    # 1. Обновляем в БД
+    # 2. Обновляем в БД
     result = await db.update_product_field(p_id, prop, message.text)
 
-    # 2. Если всё успешно (handle_db_result вернул True)
+    # 3. Если всё успешно (handle_db_result вернул True)
     if await handle_db_result(result, message):
         # --- БЛОК ОЧИСТКИ ---
         try:
             # Удаляем сообщение админа (новый текст)
             await message.delete()
             # Удаляем инструкцию "Введите..."
-            await message.bot.delete_message(message.chat.id, data["instr_msg_id"])
-            # Удаляем СТАРУЮ карточку товара
-            await message.bot.delete_message(message.chat.id, data["card_msg_id"])
+            await message.bot.delete_message(message.chat.id, data["instr_msg_id"])            
+            #  ОБНОВЛЯЕМ старую карточку свежими данными
+            await catalog.show_product_card(
+                event=message, 
+                product_id=data['edit_id'], 
+                edit_msg_id=data["card_msg_id"] # Указываем, что именно редактировать
+            )
         except Exception as e:
-            print(f"Не удалось удалить старые сообщения: {e}")
-        # ---------------------
-
-        await state.clear()
-
-        # 3. Вызываем свежую карточку.
-        # Т.к. старая удалена, эта будет единственной внизу чата.
-        await catalog.show_product_card(message, p_id)
-
+            logger.error(f"Ошибка при обновлении интерфейса: {e}")
+            await state.clear()
 
 # 1. Сначала спрашиваем подтверждение
 @router.callback_query(ProdAction.filter((F.action == "del") & (F.prop == "conf")))

@@ -84,7 +84,11 @@ async def handle_book_click(callback: types.CallbackQuery, callback_data: ProdCl
     await callback.answer()
 
 
-async def show_product_card(event: types.Message | types.CallbackQuery, product_id: int):
+async def show_product_card(
+        event: types.Message | types.CallbackQuery, 
+        product_id: int,
+        edit_msg_id: int = None
+        ):
     # Достаем свежие данные из БД
     book = await db.get_product(product_id)
     # 2. Определяем, куда слать ответ (в callback или в новое сообщение)
@@ -122,9 +126,18 @@ async def show_product_card(event: types.Message | types.CallbackQuery, product_
         text = f"📘 **Книга:** {book['name']}\n\n{book['description']}"
 
     kb.row(InlineKeyboardButton(text="⬅️ Назад в каталог", callback_data=CategoryAddClick(category=enum_cat).pack()))
-
+        # Логика отправки/редактирования:
+    if edit_msg_id:
+        # Если явно указали ID для редактирования
+        await event.bot.edit_message_text(
+            chat_id=target_msg.chat.id,
+            message_id=edit_msg_id,
+            text=text,
+            reply_markup=kb.as_markup(),
+            parse_mode="Markdown"
+        )
     # Если это сообщение (после ввода текста), шлем новое. Если кнопка — редактируем.
-    if isinstance(event, types.CallbackQuery):
+    elif isinstance(event, types.CallbackQuery):
         await event.message.edit_text(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
     else:
         await event.answer(text, reply_markup=kb.as_markup(), parse_mode="Markdown")

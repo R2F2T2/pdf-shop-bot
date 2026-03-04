@@ -102,6 +102,9 @@ async def add_price(message: types.Message, state: FSMContext):
     if not message.text.isdigit():
         new_text = get_add_product_text(data, "Неверный формат!\nВведите цену в рублях:")
         return await update_bot_interface(message, state, new_text)
+    if int(message.text) < 100:
+        new_text = get_add_product_text(data, "Цена должна быть не меньше 100р!\nВведите цену снова:")
+        return await update_bot_interface(message, state, new_text)
     await state.update_data(price=message.text)    
     data = await state.get_data()
     new_text = get_add_product_text(data, "Пришлите PDF файл:")

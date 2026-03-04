@@ -2,11 +2,11 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 from config import BOT_TOKEN
+from handlers import user, admin, catalog, add_product, payments
 load_dotenv()
 import database as db
 # Создаем логгер
 from config import init_logging
-from handlers import user, admin, catalog, add_product, payments
 init_logging()
 import logging
 logger = logging.getLogger(__name__) 
