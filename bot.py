@@ -1,22 +1,30 @@
 import asyncio
-from config import BOT_TOKEN
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
+from config import BOT_TOKEN
+from handlers import user, admin, catalog, add_product, payments
 load_dotenv()
 import database as db
-from handlers import admin, catalog, user, payments
+# Создаем логгер
+from config import init_logging
+init_logging()
+import logging
+logger = logging.getLogger(__name__) 
 
-async def main():
+async def main():    
+    logger.info("Запуск бота...")
     await db.db_start()
-    
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
-
+    
     # Подключаем роутеры
-    dp.include_routers(admin.router, user.router, payments.router, catalog.router)
+    dp.include_routers(user.router, admin.router, catalog.router, add_product.router, payments.router)
 
-    print("Бот запущен!")
     await dp.start_polling(bot)
+    logger.info("Бот запущен!")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.warning("Бот остановлен!")

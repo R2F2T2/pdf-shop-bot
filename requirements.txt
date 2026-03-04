@@ -7,9 +7,11 @@ aiosqlite==0.22.1
 annotated-types==0.7.0
 attrs==25.4.0
 certifi==2026.1.4
+colorlog==6.10.1
 dotenv==0.9.9
 frozenlist==1.8.0
 idna==3.11
+loguru==0.7.3
 magic-filter==1.0.12
 multidict==6.7.1
 propcache==0.4.1
