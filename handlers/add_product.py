@@ -6,7 +6,7 @@ from utils.states import AddProduct
 from utils.filters import IsAdmin
 from utils.helper import handle_db_result, get_add_product_text, update_bot_interface
 from handlers import catalog
-from models import PCategory,  CategoryAddClick, DBResult
+from models import CategoryAddClick, DBResult, Category, Product
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -29,15 +29,21 @@ async def start_add(callback: types.CallbackQuery, state: FSMContext):
     #стираем предыдущее
     #await callback.message.delete()
     builder = InlineKeyboardBuilder()
-    for cat in PCategory:
-        builder.row(InlineKeyboardButton(
-            text=cat.value, 
-            # Важно: здесь мы передаем callback_data
-            callback_data=CategoryAddClick(category=cat).pack()
-        ))  
+    db_result = await db.get_categories()
+    if isinstance(db_result, list):        
+        for cat in db_result:
+            builder.row(InlineKeyboardButton(
+                text=cat.name, 
+                callback_data=CategoryAddClick(category_id=cat.id).pack()
+            ))
+        msg_text = "Выберите категорию:"
+    else:
+        msg_text = handle_db_result(db_result)
+
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
     try:
         sent_message = await callback.message.edit_text(
-            "Выберите категорию:",
+            msg_text,
             reply_markup=builder.as_markup()
         )
     except TelegramBadRequest as e:
@@ -48,14 +54,17 @@ async def start_add(callback: types.CallbackQuery, state: FSMContext):
         )
     # Сохраняем ID сообщения, которое будем редактировать всё время
     await state.update_data(last_msg_id=sent_message.message_id)
-    await state.set_state(AddProduct.category)
+    await state.set_state(AddProduct.category_id)
 
 # 2. Хендлер для обработки нажатия на кнопку категории
-@router.callback_query(AddProduct.category, CategoryAddClick.filter())
+@router.callback_query(AddProduct.category_id, CategoryAddClick.filter())
 async def category_chosen(callback: types.CallbackQuery, callback_data: CategoryAddClick, state: FSMContext):
     await callback.answer()   
     # Сохраняем категорию из callback_data (то, что было в кнопке)
-    await state.update_data(category=callback_data.category)
+    await state.update_data(category_id=callback_data.category_id)
+    cat = await db.get_category(callback_data.category_id)
+    if isinstance(cat, Category):
+            await state.update_data(category_name=cat.name)
     data = await state.get_data()
     new_text = get_add_product_text(data, "Введите название:")
     # Редактируем старое сообщение
@@ -63,16 +72,18 @@ async def category_chosen(callback: types.CallbackQuery, callback_data: Category
         await callback.message.edit_text(new_text, parse_mode="HTML") 
     except TelegramBadRequest as e:
         logger.warning(f"Не удалось отредактировать предыдущее сообщение бота: {e}")
-        await callback.message.answer(new_text) 
-    logger.debug(f"Введена категория: {callback_data.category.value}")    
-    # Переходим к следующему состоянию
-    await state.set_state(AddProduct.name)
+        await callback.message.answer(new_text)
+    category = await db.get_category(callback_data.category_id)
+    if isinstance(category, Category): 
+        logger.debug(f"Введена категория: {category.name}")    
+        # Переходим к следующему состоянию
+        await state.set_state(AddProduct.name)
 
 # 3. Хендлер для ввода названия (текстом)
 @router.message(AddProduct.name)
 async def add_name(message: types.Message, state: FSMContext):        
     data = await state.get_data()
-    if await db.check_duplicate_name(data.get('category'), message.text) == DBResult.DUPLICATE:
+    if await db.check_duplicate_name(data.get('category_id'), message.text) == DBResult.DUPLICATE:
         new_text = get_add_product_text(data, "Товар с таким названием уже есть в базе\n" \
                                         "Введите другое имя:")        
         return await update_bot_interface(message, state, new_text)
@@ -153,25 +164,32 @@ async def process_confirm(callback: types.CallbackQuery, state: FSMContext):
     logger.debug("Пользователь нажал кнопку Сохранить")
     await callback.answer()
     data = await state.get_data()
-    new_db_id = await db.add_product(data)
+    old_msg_id = data.get("last_msg_id")
+    new_product = Product(
+        id=None, # БД сама назначит ID
+        category_id=data['category_id'],
+        name=data['name'],
+        description=data['description'],
+        price=data['price'],
+        file_id=data['file_id']
+    )
+    new_db_id = await db.add_product(new_product)
     message = callback.message
-    if  await handle_db_result(new_db_id, callback.message):
+    if  handle_db_result(new_db_id) == True:
         # Всплывашка сверху
         await callback.answer("✅ Товар успешно добавлен!", show_alert=False)
-        # Удаляем сообщение с кнопками
-        #await callback.message.delete()
-        await catalog.show_product_card(callback, new_db_id)
+        await catalog.show_product_card(callback.message, new_db_id, old_msg_id)
     else:
         await callback.answer("❌ Произошла ошибка при сохранении в базу.\nВозвращамеся в каталог.", show_alert=True)
-        await catalog.send_catalog_view(message, data.get('category'))
+        await catalog.send_catalog_view(message, data.get('category_id'))
     await state.clear()
 
 # 7. Хендлер нажатия кнопки "отмена" (текстом)
 @router.callback_query(F.data == "cancel_add")
 async def process_cancel(callback: types.CallbackQuery, state: FSMContext):
-    logger.debug("Пользователь нажал кнопку Отмена")
+    logger.info("Пользователь отменил добавление продукта")
     await callback.answer()
     message = callback.message
     data = await state.get_data()
-    await catalog.send_catalog_view(message, data.get('category'))
+    await catalog.send_catalog_view(message, data.get('category_id'))
     await state.clear()

@@ -2,6 +2,8 @@ from models import DBResult
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+from typing import Any
+from models import Product
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -9,33 +11,21 @@ init_logging()
 import logging
 logger = logging.getLogger(__name__)
 
-async def handle_db_result(result, message, success_handler=None):
-    """
-    Универсальный обработчик ответов от БД.
-    :param result: То, что вернула функция БД (dict или DBResult)
-    :param message: Объект сообщения aiogram для ответа юзеру
-    :param success_handler: Функция, которая выполнится, если данные получены
-    """
-    # 1. Проверяем, не ошибка ли это из нашего Enum
+def handle_db_result( result: Any | DBResult)-> str | bool:
+
     if isinstance(result, DBResult):
-        if result == DBResult.NOT_FOUND:
-            await message.answer("❌ Объект не найден в базе данных.")
-        elif result == DBResult.DUPLICATE:
-            await message.answer("⚠️ Такая запись уже существует (дубликат).")
-        elif result == DBResult.ERROR:
-            await message.answer("🆘 Произошла системная ошибка базы данных.")
-        elif result == DBResult.EMPTY:
-            await message.answer("Раздел пуст")
-        return False  # Сигнализируем, что была проблема
-    
-    # 2. Если это не DBResult, значит это наши данные (словарь или ID)
-    if success_handler:
-        await success_handler(result)
+        match result:
+            case DBResult.NOT_FOUND: return "❌ Объект не найден в базе данных."
+            case DBResult.DUPLICATE: return "⚠️ Такая запись уже существует (дубликат)."
+            case DBResult.ERROR:     return "🆘 Произошла системная ошибка базы данных."
+            case DBResult.EMPTY:     return "📂 Раздел пока пуст."
+            case _:                  return "❓ Неизвестный статус базы данных."    
+
     return True # Все прошло успешно
 
 def get_add_product_text(data: dict, next_step: str) -> str:
     # Собираем то, что уже введено
-    category = data.get('category')
+    category_id = data.get('category_name', '...')
     name = data.get('name', '...')
     desc = data.get('description', '...')
     price = data.get('price', '...')
@@ -43,7 +33,7 @@ def get_add_product_text(data: dict, next_step: str) -> str:
     text = (
         f"<b>🛒 Добавление товара</b>\n"
         f"━━━━━━━━━━━━━━\n"
-        f"📂 Категория: {category.value if category else '...'}\n"
+        f"📂 Категория: {category_id}\n"
         f"🏷 Название: {name}\n"
         f"📝 Описание: {desc}\n"
         f"💰 Цена: {price}\n"
@@ -52,21 +42,17 @@ def get_add_product_text(data: dict, next_step: str) -> str:
     )
     return text
 
-def get_string_data(prod) -> str:
+def get_string_data(prod: Product) -> str:
     """Возвращет строку с полями объекта"""
     # Обрезаем описание и добавляем троеточие, если оно длинное
-    desc = prod.get('description', '')
+    desc = prod.description
     short_desc = (desc[:17] + '...') if len(desc) > 20 else desc
     
     # Сокращаем длинный file_id (оставляем начало и конец)
-    f_id = str(prod.get('file_id', ''))
+    f_id = prod.file_id
     short_id = f"{f_id[:6]}...{f_id[-4:]}" if len(f_id) > 10 else f_id
     
-    # Категория (если это Enum, берем .value)
-    cat = prod.get('category')
-    cat_val = cat.value if hasattr(cat, 'value') else cat
-
-    return f"{cat_val} | {prod['name']} | {short_desc} | Цена: {prod['price']} | ID: {short_id}"
+    return f"{prod.category_id} | {prod.name} | {short_desc} | Цена: {prod.price} | ID: {short_id}"
 
 
 async def update_bot_interface(message: types.Message, state: FSMContext, new_text: str, reply_markup=None):

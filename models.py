@@ -1,5 +1,21 @@
 from enum import Enum
 from aiogram.filters.callback_data import CallbackData
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class Product:
+    id: int
+    category_id: int
+    name: str
+    description: str
+    price: float
+    file_id: str
+
+@dataclass
+class Category:
+    id: int
+    name: str
 
 class DBResult(Enum):
     DONE = 'done'
@@ -8,15 +24,12 @@ class DBResult(Enum):
     ERROR = 'error'
     EMPTY = 'empty'
 
-class PCategory(Enum):
-    psyho = 'Психология'
-    neuro = 'Неврология'
-
+    
 class CategoryClick(CallbackData, prefix="catalog"):
-    category: PCategory
+    category_id: int
 
-class CategoryAddClick(CallbackData, prefix="catalog"):
-    category: PCategory
+class CategoryAddClick(CallbackData, prefix="add"):
+    category_id: int
     
 class ProdClick(CallbackData, prefix="p"):
     id: int
@@ -25,4 +38,4 @@ class ProdAction(CallbackData, prefix="prod"):
     action: str      # "view", "confirm_delete", "delete"
     prop: str = 'default'
     id: int          
-    cat: PCategory 
+    cat_id: int  

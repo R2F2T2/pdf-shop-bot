@@ -1,6 +1,8 @@
 
 import aiosqlite
-from models import DBResult, PCategory
+from typing import List
+from typing import Optional
+from models import DBResult, Category, Product, Category
 DB_PATH = 'bot_database.db'
 #Создаем логгер
 from config import init_logging
@@ -11,42 +13,80 @@ logger = logging.getLogger(__name__)
 
 async def db_start():
     async with aiosqlite.connect(DB_PATH) as db:
-        logger.info("Создание таблицы")
+        logger.info("Создание таблиц")
         # Таблица пользователей (уже была)
         await db.execute("CREATE TABLE IF NOT EXISTS users(user_id PRIMARY KEY)")
-        # Новая таблица для товаров
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE
+            )
+        """)
+
+        # Таблица товаров
         await db.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category text,
+                category_id INTEGER,  -- Внешний ключ (FK)
                 name TEXT,
                 description TEXT,
                 price REAL,
                 file_id TEXT,
-                UNIQUE(category, name)
+                FOREIGN KEY (category_id) REFERENCES categories (id),
+                UNIQUE(category_id, name)
             )
         """)
         await db.commit()
 
-async def get_all_products(category: PCategory):
-    logger.info(f"Запрос продуктов категории: {category.value}")
+async def get_categories() -> list[Category]|DBResult:
+    logger.info(f"Запрос категорий")
+    categories = []
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute("SELECT * FROM products WHERE category = ? ORDER BY name", (category.name,)) as cursor:
+            async with db.execute("SELECT * FROM categories ORDER BY name") as cursor:
                 rows = await cursor.fetchall()
                 if len(rows) == 0:
-                    logger.warning(f"Продуктов в категории {category.value} в базе нет!")
+                    logger.warning(f"Таблица категорий пуста!")
                     return DBResult.EMPTY
                 else:                
-                    result = [dict(row) for row in rows] 
-                    logger.info(f"Запрос продуктов категории {category.value} выполнен.")                       
-                    return result
+                    for row in rows:
+                        category = Category(**dict(row))
+                        categories.append(category)  
+                    logger.info(f"Запрос категории выполнен.")                       
+                    return categories
     except Exception as e:
         logger.error(f'Ошибка при запросе всех продуктов: {e}') # Вот это покажет причину
         return DBResult.ERROR
 
-async def get_product(p_id):
+async def get_category(c_id: int) -> Category | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM categories WHERE id = ?", (c_id,)) as cursor:
+            row = await cursor.fetchone()
+            return Category(**dict(row)) if row else None
+
+async def get_all_products(category: Category) -> list[Product]|DBResult:
+    logger.info(f"Запрос продуктов категории: {category.name}")
+    products = []
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM products WHERE category_id = ? ORDER BY name", (category.id,)) as cursor:                
+                rows = await cursor.fetchall()
+                if len(rows) == 0:
+                    logger.warning(f"Продуктов в категории {category.name} в базе нет!")
+                    return DBResult.EMPTY
+                else:                
+                    products = [Product(**dict(row)) for row in rows]
+                    logger.info(f"Запрос продуктов категории {category.name} выполнен.")                       
+                    return products
+    except Exception as e:
+        logger.error(f'Ошибка при запросе всех продуктов: {e}') # Вот это покажет причину
+        return DBResult.ERROR
+
+async def get_product(p_id) -> Product|DBResult:
     logger.info(f"Запрос продукта id: {p_id}")
     try:
         async with aiosqlite.connect(DB_PATH) as db:
@@ -55,87 +95,54 @@ async def get_product(p_id):
                 row = await cursor.fetchone()                
                 if row:
                     logger.info(f"Запрос продукта {p_id} выполнен")
-                    return dict(row)
+                    # Распаковываем словарь в аргументы класса
+                    return Product(**dict(row))
                 return DBResult.NOT_FOUND         
     except Exception as e:
         logger.error(f'Ошибка при запросе продукта id = {p_id} : {e}')
         return DBResult.ERROR
 
-async def add_product(product_data: dict):
+async def add_product(product: Product) -> int|DBResult:
     logger.info("Добавляем новый продукт")
-    """
-    Принимает словарь с данными товара. 
-    Ожидает, что в product_data['category'] лежит объект PCategory (Enum).
-    """
-    category = product_data.get('category')
-
     # Проверка: если пришла строка, пробуем превратить её в Enum
-    if isinstance(category, str):
-        try:
-            category = PCategory[category]
-        except KeyError:
-            logger.warning(f"Неверная категория {category}")
-            return DBResult.ERROR
             
     # Если это не Enum и не строка, которую мы смогли превратить в Enum
-    if not isinstance(category, PCategory):
-        logger.warning(f"Поле category должно быть объектом Enum Category")
-        return DBResult.ERROR
-    
-    str_data = get_string_data(product_data)
-    logger.info("Запись в базу: " + str_data)
-
-    try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            cursor = await db.execute(
-                "INSERT INTO products (category, name, description, price, file_id) VALUES (?, ?, ?, ?, ?)",
-                (
-                    category.name, # В базу всегда пишем техническое имя (PLANS/TASKS)
-                    product_data['name'],
-                    product_data['description'],
-                    product_data['price'], 
-                    product_data['file_id']
+    if isinstance(product, Product):    
+        str_data = get_string_data(product)
+        logger.info("Запись в базу: " + product.name)
+        try:
+            async with aiosqlite.connect(DB_PATH) as db:
+                cursor = await db.execute(
+                    "INSERT INTO products (category_id, name, description, price, file_id) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        product.category_id, # В базу всегда пишем техническое имя (PLANS/TASKS)
+                        product.name,
+                        product.description,
+                        product.price, 
+                        product.file_id
+                    )
                 )
-            )
-            await db.commit()
-            logger.info("Введена новая запись:" + str_data)
-            return cursor.lastrowid
-            
-    except aiosqlite.IntegrityError:
-        logger.warning("Попытка записи дубликата")
-        return DBResult.DUPLICATE
-    except Exception as e:
-        logger.error(f'Ошибка записи: {e}')
+                await db.commit()
+                logger.info("Введена новая запись:" + str_data)
+                return cursor.lastrowid
+                
+        except aiosqlite.IntegrityError:
+            logger.warning("Попытка записи дубликата")
+            return DBResult.DUPLICATE
+        except Exception as e:
+            logger.error(f'Ошибка записи: {e}')
+            return DBResult.ERROR
+    else:
         return DBResult.ERROR
 
-
-#TODO убрать принты (пока не используется)
-async def add_product_ft(p_category: PCategory, p_name, p_description, p_price, p_file_id):
-    """Принимает поля и сохраняет в БД"""
-    print(f'БД: Запись данных: {p_category.name}, {p_name}, {p_description}, {p_price}, {p_file_id} ')
-    try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            cursor = await db.execute(
-                "INSERT INTO products (category, name, description, price, file_id) VALUES (?, ?, ?, ?, ?)",
-                (p_category.name, p_name, p_description, p_price, p_file_id)
-            )
-            await db.commit()        
-            print('БД: Запись прошла успешно')
-            return  cursor.lastrowid
-    except aiosqlite.IntegrityError:
-        return DBResult.DUPLICATE
-    except Exception as e:
-        print(f'БД: Ошибка добавления в базу: {e}')
-        return DBResult.ERROR
-
-async def delete_product(p_id: int):
+async def delete_product(p_id: int) -> int|DBResult:
     """Удаляем из базы данных и возвращаем категорию"""
     logger.info(f'Удаляем: {p_id}')
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             # Используем RETURNING для получения значения категории
             cursor = await db.execute(
-                "DELETE FROM products WHERE id = ? RETURNING category",
+                "DELETE FROM products WHERE id = ? RETURNING category_id",
                 (p_id,)
             )
             # Извлекаем результат (одну строку)
@@ -153,32 +160,32 @@ async def delete_product(p_id: int):
         logger.error(f'Ошибка удаления продукта id={p_id} : {e}')
         return DBResult.ERROR
 
-async def update_product(p_id, p_category: PCategory, p_name, p_description, p_price):
+async def update_product(p: Product) -> DBResult:
     """Редактирует продукт по ip"""
-    logger.info(f'Редактируем продукт id = {p_id}')
+    logger.info(f'Редактируем продукт id = {p}')
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             cursor = await db.execute(
                 '''
                 UPDATE products 
                 SET 
-                    category = ?,
+                    category_id = ?,
                     name = ?,
                     description = ?,
                     price = ?                
                 WHERE id = ?
                 ''', 
-                (p_category.name, p_name, p_description, p_price, p_id)
+                (p.category_id, p.name, p.description, p.price, p.id)
             )            
             await db.commit()
             if cursor.rowcount == 0:
-                logger.warning(f"Ошибка удаления продукта id={p_id}. Товара нет в базе.!")
+                logger.warning(f"Ошибка удаления продукта id={p.id}. Товара нет в базе.!")
                 return DBResult.NOT_FOUND
             return "DONE"
     except aiosqlite.IntegrityError:
         return DBResult.DUPLICATE
     except Exception as e:
-        logger.warning(f"Ошибка удаления продукта id={p_id}. {e}")
+        logger.warning(f"Ошибка удаления продукта id={p.id}. {e}")
         return DBResult.ERROR
 
 async def delete_all_product():
@@ -197,7 +204,7 @@ async def delete_all_product():
         return DBResult.ERROR
 
 
-async def update_product_field(product_id: int, field_name: str, new_value):
+async def update_product_field(product_id: int, field_name: str, new_value) -> DBResult:
     logger.info(f"Редактирование свойства {field_name} у продукта id = {product_id}")
     query = f"UPDATE products SET {field_name} = ? WHERE id = ?"
     try:
@@ -214,13 +221,13 @@ async def update_product_field(product_id: int, field_name: str, new_value):
         logger.error(f'Ошибка редактирования свойства: {e}')
         return "ERROR"
     
-async def check_duplicate_name(category: PCategory, product_name):
+async def check_duplicate_name(category_id: int, product_name: str) -> DBResult:
     # Используем COUNT, чтобы база сама посчитала количество
-    query = "SELECT COUNT(*) FROM products WHERE category = ? AND name = ?"
+    query = "SELECT COUNT(*) FROM products WHERE category_id = ? AND name = ?"
     logger.info("Проверяем дубликаты...")
     try:
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(query, (category.name, product_name,)) as cursor:
+            async with db.execute(query, (category_id, product_name,)) as cursor:
                 # Извлекаем результат (это будет кортеж, например (1,))
                 result = await cursor.fetchone()
                 count = result[0]

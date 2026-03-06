@@ -26,12 +26,12 @@ async def success_pay(message: types.Message):
     # но Telegram не всегда дает это сделать сразу. 
     # Поэтому просто шлем файл.
     
-    await message.answer(f"✅ Оплата принята! Благодарим за покупку <b>{product['name']}</b>.")
+    await message.answer(f"✅ Оплата принята! Благодарим за покупку <b>{product.name}</b>.", parse_mode="HTML")
     
     # Отправляем файл
-    if product.get('file_id'):
+    if product.file_id:
         await message.answer_document(
-            document=product['file_id'],
+            document=product.file_id,
             caption="Ваш документ готов к скачиванию"
         )
     else:
@@ -42,7 +42,7 @@ async def success_pay(message: types.Message):
 @router.callback_query(ProdAction.filter(F.action == "pay"))
 async def handle_buy(callback: types.CallbackQuery, callback_data: ProdAction):
     p_id = callback_data.id
-    logger.debug(f"Пользователь id={callback.from_user.id} запустил оплату товара: {p_id}")
+    logger.info(f"Пользователь id={callback.from_user.id} запустил оплату товара: {p_id}")
     
     try:
         await callback.message.delete()
@@ -50,8 +50,8 @@ async def handle_buy(callback: types.CallbackQuery, callback_data: ProdAction):
         logger.warning(f"Не удалось удалить сообщение перед инвойсом: {e}")
 
     product = await db.get_product(p_id)
-    name = product['name']
-    price = product['price']
+    name = product.name
+    price = product.price
 
     prices = [LabeledPrice(label=name, amount=int(float(price) * 100))]
 

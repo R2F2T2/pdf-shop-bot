@@ -1,7 +1,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class AddProduct(StatesGroup):
-    category = State()
+    category_id = State()
     name = State()
     description = State()
     price = State()

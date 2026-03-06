@@ -6,7 +6,7 @@ from utils.states import EditProduct
 from utils.filters import IsAdmin
 from utils.helper import handle_db_result
 from handlers import catalog
-from models import ProdAction, CategoryClick, PCategory
+from models import ProdAction, CategoryClick, Category, DBResult
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -34,7 +34,7 @@ async def start_edit_field(
     await state.update_data(
         edit_id=callback_data.id,
         edit_prop=callback_data.prop,
-        edit_cat=callback_data.cat,
+        edit_cat=callback_data.cat_id,
         card_msg_id=callback.message.message_id,  # ID старой карточки
         instr_msg_id=instruction.message_id,  # ID текста "Введите..."
     )
@@ -48,6 +48,7 @@ async def process_edit_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
     p_id = data["edit_id"]
     prop = data["edit_prop"]
+    cat_id = data["edit_cat"]
     
     # 1. Проверяем цену
     if prop == "price":
@@ -64,12 +65,21 @@ async def process_edit_value(message: types.Message, state: FSMContext):
                     chat_id=message.chat.id,
                     message_id=data["instr_msg_id"],
                     text="Цена должна быть числом!\nВведите цену:")         
-
+    if prop == "name" and await db.check_duplicate_name(cat_id, message.text) == DBResult.DUPLICATE:
+        cat = db.get_category(p_id)
+        if isinstance(cat, Category):
+            cat: Category = cat
+        else:
+            return
+        return await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=data["instr_msg_id"],
+            text=f"В категории {cat.name} уже есть объект с названием {message.text}!\nВведите другое название:")   
     # 2. Обновляем в БД
     result = await db.update_product_field(p_id, prop, message.text)
 
     # 3. Если всё успешно (handle_db_result вернул True)
-    if await handle_db_result(result, message):
+    if handle_db_result(result) == True:
         # --- БЛОК ОЧИСТКИ ---
         try:
             # Удаляем сообщение админа (новый текст)
@@ -84,22 +94,22 @@ async def process_edit_value(message: types.Message, state: FSMContext):
             )
         except Exception as e:
             logger.error(f"Ошибка при обновлении интерфейса: {e}")
-            await state.clear()
+    await state.clear()
 
 # 1. Сначала спрашиваем подтверждение
-@router.callback_query(ProdAction.filter((F.action == "del") & (F.prop == "conf")))
+@router.callback_query(ProdAction.filter((F.action == "del") and (F.prop == "conf")))
 async def confirm_delete(callback: types.CallbackQuery, callback_data: ProdAction):
     kb = InlineKeyboardBuilder()
     kb.row(
         InlineKeyboardButton(
             text="✅ Да, удалить",
             callback_data=ProdAction(
-                action="del", prop="force", id=callback_data.id, cat=callback_data.cat
+                action="del", prop="force", id=callback_data.id, cat_id=callback_data.cat_id
             ).pack(),
         ),
         InlineKeyboardButton(
             text="❌ Отмена",
-            callback_data=CategoryClick(category=callback_data.cat).pack(),
+            callback_data=CategoryClick(category_id=callback_data.cat_id).pack(),
         ),
     )
     try:
@@ -116,9 +126,8 @@ async def confirm_delete(callback: types.CallbackQuery, callback_data: ProdActio
 # 2. Само удаление
 @router.callback_query(ProdAction.filter((F.action == "del") & (F.prop == "force")))
 async def delete_book_action(callback: types.CallbackQuery, callback_data: ProdAction):
-
+    await callback.answer()  # Убираем "часики"
     result = await db.delete_product(callback_data.id)
-    if not await handle_db_result(result, callback.message):
-        await callback.answer()  # Убираем "часики"
+    if handle_db_result(result) != True:
         return
-    await catalog.send_catalog_view(callback.message, callback_data.cat)
+    await catalog.send_catalog_view(callback.message, callback_data.cat_id)
