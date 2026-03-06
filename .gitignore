@@ -8,3 +8,4 @@ __pycache__/
 *.log
 *$py.class
 testing/
+migrate.py
