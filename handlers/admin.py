@@ -6,7 +6,7 @@ from utils.states import EditProduct
 from utils.filters import IsAdmin
 from utils.helper import handle_db_result
 from handlers import catalog
-from models import ProdAction, CategoryClick, Category, DBResult
+from models import ProdAction, CategoryClick, Category, DBResult, PROPS_RU
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -23,20 +23,42 @@ router.callback_query.filter(IsAdmin())
 
 @router.callback_query(ProdAction.filter(F.action == "edit"))
 async def start_edit_field(
-    callback: types.CallbackQuery, callback_data: ProdAction, state: FSMContext
-):
-    # 1. Сохраняем ID карточки товара (в которой нажали кнопку)
-    # И ID инструкции, которую мы сейчас отправим
-    instruction = await callback.message.answer(
-        f"📝 Введите новое значение для {callback_data.prop}:"
-    )
+    callback: types.CallbackQuery, callback_data: ProdAction, state: FSMContext):
+    data = await state.get_data()
+    old_inst_id = data.get("instr_msg_id")
+    old_prop = data.get("edit_prop")
+    readable_prop = PROPS_RU.get(callback_data.prop, callback_data.prop)
+    text = f'<b>"{readable_prop}"</b>\nВведите новое значение:'
+    # Если в стейте уже висит ID старой инструкции
+    if old_inst_id:
+        if old_prop != callback_data.prop: #Если свойство не совпадает пытаемя редактировать другое совойство
+            try:                
+                instruction = await callback.bot.edit_message_text(
+                                chat_id=callback.message.chat.id,
+                                message_id=old_inst_id,
+                                text=text,
+                                parse_mode="HTML")   
+                new_instr_id = old_inst_id
+            except Exception as e:
+                # Если сообщение удалено или возникла ошибка — шлем новое
+                logger.error(f"Не могу отредактировать сообщение: {e}")
+                instruction = await callback.message.answer(text, parse_mode="HTML")
+                new_instr_id = instruction.message_id
+        else:
+            await callback.answer()
+            return
+    #Если инструкций не было, выдаем новое
+    else: 
+        # Если это первое нажатие кнопки «Изменить»
+        instruction = await callback.message.answer(text, parse_mode="HTML")
+        new_instr_id = instruction.message_id
 
     await state.update_data(
         edit_id=callback_data.id,
         edit_prop=callback_data.prop,
         edit_cat=callback_data.cat_id,
         card_msg_id=callback.message.message_id,  # ID старой карточки
-        instr_msg_id=instruction.message_id,  # ID текста "Введите..."
+        instr_msg_id=new_instr_id,  # ID текста "Введите..."
     )
 
     await state.set_state(EditProduct.waiting_for_value)

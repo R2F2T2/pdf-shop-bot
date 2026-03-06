@@ -24,6 +24,13 @@ class DBResult(Enum):
     ERROR = 'error'
     EMPTY = 'empty'
 
+# Словарь для перевода тех. имен в человеческие
+PROPS_RU = {
+    "name": "Название",
+    "price": "Цена",
+    "description": "Описание",
+    "category_id": "Категория"    
+}
     
 class CategoryClick(CallbackData, prefix="catalog"):
     category_id: int
