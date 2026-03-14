@@ -132,7 +132,14 @@ async def send_catalog_view(callback: types.CallbackQuery, category_id: int):
         msg_text = handle_db_result(db_result)
     
     if user_id in ADMIN_IDS:
-        builder.row(InlineKeyboardButton(text="➕ Добавить продукт", callback_data="prod_add"))
+        builder.row(InlineKeyboardButton(
+            text="➕ Добавить продукт", 
+            callback_data=ProdAction(
+                action="add", 
+                id=0,           # товара еще нет, ставим 0
+                cat_id=category_id
+                ).pack()
+            ))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="show_categories"))
     # 3. Редактируем старое сообщение (меню обновляется "на месте")
     try:

@@ -6,7 +6,7 @@ from utils.states import AddProduct
 from utils.filters import IsAdmin
 from utils.helper import handle_db_result, get_add_product_text, update_bot_interface
 from handlers import catalog
-from models import CategoryAddClick, DBResult, Category, Product
+from models import CategoryAddClick, DBResult, Category, Product, ProdAction
 import database as db
 #Создаем логгер
 from config import init_logging
@@ -21,7 +21,7 @@ router.message.filter(IsAdmin())
 router.callback_query.filter(IsAdmin())
 add_text_message = "Добавление товара"
 
-# 1. Хендлер для вывода кнопок категорий
+# TODO delete
 @router.callback_query(F.data == 'prod_add')
 async def start_add(callback: types.CallbackQuery, state: FSMContext):
     logger.info(f"Пользователь {callback.from_user.id} начал добавление продукта")
@@ -56,7 +56,7 @@ async def start_add(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(last_msg_id=sent_message.message_id)
     await state.set_state(AddProduct.category_id)
 
-# 2. Хендлер для обработки нажатия на кнопку категории
+# TODO delete
 @router.callback_query(AddProduct.category_id, CategoryAddClick.filter())
 async def category_chosen(callback: types.CallbackQuery, callback_data: CategoryAddClick, state: FSMContext):
     await callback.answer()   
@@ -76,6 +76,30 @@ async def category_chosen(callback: types.CallbackQuery, callback_data: Category
     category = await db.get_category(callback_data.category_id)
     if isinstance(category, Category): 
         logger.debug(f"Введена категория: {category.name}")    
+        # Переходим к следующему состоянию
+        await state.set_state(AddProduct.name)
+
+@router.callback_query(ProdAction.filter(F.action == "add"))
+async def start_add_ft(callback: types.CallbackQuery, callback_data: ProdAction, state: FSMContext):
+    await callback.answer()   
+    # Сохраняем категорию из callback_data (то, что было в кнопке)
+    await state.update_data(category_id=callback_data.cat_id)
+    cat = await db.get_category(callback_data.cat_id)
+    if isinstance(cat, Category):
+            await state.update_data(category_name=cat.name)
+    data = await state.get_data()
+    new_text = get_add_product_text(data, "Введите название:")
+    # Редактируем старое сообщение
+    try:
+        sent_msg = await callback.message.edit_text(new_text, parse_mode="HTML") 
+    except TelegramBadRequest as e:
+        logger.warning(f"Не удалось отредактировать предыдущее сообщение бота: {e}")
+        await callback.message.answer(new_text)
+    category = await db.get_category(callback_data.cat_id)
+    if isinstance(category, Category): 
+        logger.debug(f"Введена категория: {category.name}")
+        # Сохраняем ID сообщения, которое будем редактировать всё время
+        await state.update_data(last_msg_id=sent_msg.message_id)    
         # Переходим к следующему состоянию
         await state.set_state(AddProduct.name)
 
