@@ -31,8 +31,7 @@ async def show_main_menu(event: types.Message | types.CallbackQuery):
     builder = InlineKeyboardBuilder()
 
     if user_id in ADMIN_IDS: #Меню для админа
-        logger.info("Вывод меню администратора")
-        builder.row(InlineKeyboardButton(text="➕ Добавить продукт", callback_data="prod_add"))
+        logger.info("Вывод меню администратора")        
         builder.row(InlineKeyboardButton(text="📝 Список (Редактировать)", callback_data="show_categories"))
         text = "👋 Приветсвую, администратор!"
     else: #Меню для юзера

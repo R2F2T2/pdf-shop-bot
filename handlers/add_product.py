@@ -161,7 +161,7 @@ async def add_file(message: types.Message, state: FSMContext):
 # 7. Хендлер нажатия кнопки "Сохранить"
 @router.callback_query(F.data == "confirm_add")
 async def process_confirm(callback: types.CallbackQuery, state: FSMContext):
-    logger.debug("Пользователь нажал кнопку Сохранить")
+    logger.debug(f"Пользователь {callback.from_user.id} {callback.from_user.full_name} нажал кнопку Сохранить")
     await callback.answer()
     data = await state.get_data()
     old_msg_id = data.get("last_msg_id")
@@ -174,14 +174,13 @@ async def process_confirm(callback: types.CallbackQuery, state: FSMContext):
         file_id=data['file_id']
     )
     new_db_id = await db.add_product(new_product)
-    message = callback.message
     if  handle_db_result(new_db_id) == True:
         # Всплывашка сверху
         await callback.answer("✅ Товар успешно добавлен!", show_alert=False)
-        await catalog.show_product_card(callback.message, new_db_id, old_msg_id)
+        await catalog.show_product_card(callback, new_db_id, old_msg_id)
     else:
         await callback.answer("❌ Произошла ошибка при сохранении в базу.\nВозвращамеся в каталог.", show_alert=True)
-        await catalog.send_catalog_view(message, data.get('category_id'))
+        await catalog.send_catalog_view(callback, data.get('category_id'))
     await state.clear()
 
 # 7. Хендлер нажатия кнопки "отмена" (текстом)
@@ -189,7 +188,6 @@ async def process_confirm(callback: types.CallbackQuery, state: FSMContext):
 async def process_cancel(callback: types.CallbackQuery, state: FSMContext):
     logger.info("Пользователь отменил добавление продукта")
     await callback.answer()
-    message = callback.message
     data = await state.get_data()
-    await catalog.send_catalog_view(message, data.get('category_id'))
+    await catalog.send_catalog_view(callback, data.get('category_id'))
     await state.clear()

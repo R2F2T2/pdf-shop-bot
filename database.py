@@ -135,6 +135,25 @@ async def add_product(product: Product) -> int|DBResult:
     else:
         return DBResult.ERROR
 
+async def add_category(cat_name: str) -> int|DBResult:
+    logger.info("Добавляем новую категорию")
+ 
+    logger.info("Запись в базу категории: " + cat_name)
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                "INSERT INTO categories (name) VALUES (?)", (cat_name, ))
+            await db.commit()
+            logger.info("Введена новая категория:" + cat_name)
+            return cursor.lastrowid            
+    except aiosqlite.IntegrityError:
+        logger.warning("Попытка записи дубликата:" + cat_name )
+        return DBResult.DUPLICATE
+    except Exception as e:
+        logger.error(f'Ошибка записи: {e}')
+        return DBResult.ERROR
+
+
 async def delete_product(p_id: int) -> int|DBResult:
     """Удаляем из базы данных и возвращаем категорию"""
     logger.info(f'Удаляем: {p_id}')

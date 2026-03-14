@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 from config import BOT_TOKEN
-from handlers import user, admin, catalog, add_product, payments
+from handlers import user, admin, catalog, add_category, add_product, payments
 load_dotenv()
 import database as db
 # Создаем логгер
@@ -18,7 +18,7 @@ async def main():
     dp = Dispatcher()
     
     # Подключаем роутеры
-    dp.include_routers(user.router, admin.router, catalog.router, add_product.router, payments.router)
+    dp.include_routers(user.router, admin.router, catalog.router, add_category.router, add_product.router, payments.router)
 
     await dp.start_polling(bot)
     logger.info("Бот запущен!")

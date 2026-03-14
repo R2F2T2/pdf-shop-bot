@@ -16,7 +16,7 @@ def handle_db_result( result: Any | DBResult)-> str | bool:
     if isinstance(result, DBResult):
         match result:
             case DBResult.NOT_FOUND: return "❌ Объект не найден в базе данных."
-            case DBResult.DUPLICATE: return "⚠️ Такая запись уже существует (дубликат)."
+            case DBResult.DUPLICATE: return "⚠️ Такая запись уже существует (дубликат)\nВведите другое значение:"
             case DBResult.ERROR:     return "🆘 Произошла системная ошибка базы данных."
             case DBResult.EMPTY:     return "📂 Раздел пока пуст."
             case _:                  return "❓ Неизвестный статус базы данных."    

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 #----------------------------
 router = Router()
 
-@router.callback_query(F.data == "show_categories")
+#TODO удалить
 async def process_show_category(callback: types.CallbackQuery):
     logger.info("Выводим меню категории")
     db_result = await db.get_categories()
@@ -30,7 +30,7 @@ async def process_show_category(callback: types.CallbackQuery):
     else:
         msg_text = handle_db_result(db_result)
         
-    #builder.row(InlineKeyboardButton(text="➕ Добавить категорию", callback_data="add_category"))
+    #builder.row(InlineKeyboardButton(text="➕ Добавить категорию", callback_data="cat_add"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
         
     try:
@@ -47,14 +47,68 @@ async def process_show_category(callback: types.CallbackQuery):
         )
     await callback.answer()
 
+@router.callback_query(F.data == "show_categories")
+async def process_show_categories_feat(
+        event: types.Message | types.CallbackQuery,
+        edit_msg_id: int = None
+    ):
+    logger.info("Выводим меню категории")
+    db_result = await db.get_categories()
+    builder = InlineKeyboardBuilder()
+    user_id = event.from_user.id
+    # Определяем, куда слать ответ (в callback или в новое сообщение)
+    chat_id = event.chat.id if isinstance(event, types.Message) else event.message.chat.id
+    if isinstance(db_result, list):
+        # Строим клавиатуру со списком категорий                 
+        for cat in db_result:            
+        # Используем наш класс ProdClick или просто строку с ID
+            builder.row(InlineKeyboardButton(
+                text=cat.name,
+                callback_data=CategoryClick(category_id=cat.id).pack()
+            ))       
+        msg_text = "Выберете категорию:"
+    else:
+        msg_text = handle_db_result(db_result)
+
+    if user_id in ADMIN_IDS: #Если администратор    
+        builder.row(InlineKeyboardButton(text="➕ Добавить категорию", callback_data="cat_add"))
+
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
+
+    try:
+        if edit_msg_id:
+            # Редактируем конкретное сообщение по ID
+            await event.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=edit_msg_id,
+                text=msg_text,
+                reply_markup=builder.as_markup()
+            )
+        elif isinstance(event, types.CallbackQuery):
+            # Если это нажатие кнопки "назад" из меню products — редактируем текущее сообщение кнопки
+            await event.message.edit_text(
+                text=msg_text,
+                reply_markup=builder.as_markup()
+            )
+        else:
+            # Если это просто текстовое сообщение — отправляем новое
+            await event.answer(
+                text=msg_text,
+                reply_markup=builder.as_markup()
+            )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in e.message:
+            logger.error(f"Ошибка при обновлении меню: {e}")
+
 #Возвращает каталог
 @router.callback_query(CategoryClick.filter())
 async def process_show_catalog(callback: types.CallbackQuery, callback_data: CategoryClick):
-    await send_catalog_view(callback.message, callback_data.category_id)    
+    await send_catalog_view(callback, callback_data.category_id)    
     await callback.answer()
 
-async def send_catalog_view(message: types.Message, category_id: int):
+async def send_catalog_view(callback: types.CallbackQuery, category_id: int):
     """Возвращает каталог выбранной категории"""
+    user_id = callback.from_user.id
     db_result = await db.get_category(category_id)
     result = handle_db_result(db_result)
     if isinstance(db_result, Category):
@@ -76,17 +130,19 @@ async def send_catalog_view(message: types.Message, category_id: int):
         msg_text = f"📚 Доступные учебные пособия категории {category.name} (PDF):"
     else:
         msg_text = handle_db_result(db_result)
-
+    
+    if user_id in ADMIN_IDS:
+        builder.row(InlineKeyboardButton(text="➕ Добавить продукт", callback_data="prod_add"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="show_categories"))
     # 3. Редактируем старое сообщение (меню обновляется "на месте")
     try:
-        await message.edit_text(
+        await callback.message.edit_text(
             msg_text,
             reply_markup=builder.as_markup()
         )
     except TelegramBadRequest as e:
         logger.warning(f"Не удалось отредактировать предыдущее сообщение бота: {e}")
-        await message.answer(
+        await callback.message.answer(
             msg_text,
             reply_markup=builder.as_markup()
         )
@@ -96,7 +152,6 @@ async def send_catalog_view(message: types.Message, category_id: int):
 async def handle_book_click(callback: types.CallbackQuery, callback_data: ProdClick):    
     await show_product_card(callback, callback_data.id)    
     await callback.answer()
-
 
 async def show_product_card(
         event: types.Message | types.CallbackQuery, 
