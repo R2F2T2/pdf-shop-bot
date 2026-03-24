@@ -152,4 +152,4 @@ async def delete_book_action(callback: types.CallbackQuery, callback_data: ProdA
     result = await db.delete_product(callback_data.id)
     if handle_db_result(result) != True:
         return
-    await catalog.send_catalog_view(callback.message, callback_data.cat_id)
+    await catalog.send_catalog_view(callback, callback_data.cat_id)
