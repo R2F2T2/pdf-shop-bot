@@ -88,7 +88,7 @@ async def process_edit_value(message: types.Message, state: FSMContext):
                     message_id=data["instr_msg_id"],
                     text="Цена должна быть числом!\nВведите цену:")         
     if prop == "name" and await db.check_duplicate_name(cat_id, message.text) == DBResult.DUPLICATE:
-        cat = db.get_category(p_id)
+        cat = await db.get_category(p_id)
         if isinstance(cat, Category):
             cat: Category = cat
         else:
