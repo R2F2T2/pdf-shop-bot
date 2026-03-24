@@ -3,6 +3,9 @@ from aiogram.fsm.state import State, StatesGroup
 class AddCategory(StatesGroup):
     name = State()
 
+class EditCategory(StatesGroup):
+    new_name = State()
+
 class AddProduct(StatesGroup):
     category_id = State()
     name = State()

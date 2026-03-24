@@ -153,6 +153,30 @@ async def add_category(cat_name: str) -> int|DBResult:
         logger.error(f'Ошибка записи: {e}')
         return DBResult.ERROR
 
+async def update_category(id: int, new_name: str) -> int|DBResult: 
+    logger.info(f"Присвоение категории id:{id} название {new_name}")
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                "SELECT name FROM categories WHERE id = ?", (id, ))
+            row = await cursor.fetchone()
+            if row: 
+                old_name = row[0]
+                if old_name == new_name:
+                    return DBResult.DUPLICATE
+            else:
+                return DBResult.ERROR
+            await db.execute(
+                "UPDATE categories SET name = ? WHERE id = ?", (new_name, id, ))
+            await db.commit()
+            logger.info(f"Название категории {old_name} изменено на {new_name}" )
+            return id
+    except aiosqlite.IntegrityError:
+        logger.warning("Попытка записи дубликата:" + new_name )
+        return DBResult.DUPLICATE
+    except Exception as e:
+        logger.error(f'Ошибка записи: {e}')
+        return DBResult.ERROR
 
 async def delete_product(p_id: int) -> int|DBResult:
     """Удаляем из базы данных и возвращаем категорию"""

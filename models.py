@@ -35,6 +35,10 @@ PROPS_RU = {
 class CategoryClick(CallbackData, prefix="catalog"):
     category_id: int
 
+class CategoryAction(CallbackData, prefix="cat"):
+    id: int
+    action: str
+
 class CategoryAddClick(CallbackData, prefix="add"):
     category_id: int
     

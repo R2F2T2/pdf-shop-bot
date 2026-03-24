@@ -3,8 +3,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder,InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 from config import ADMIN_IDS
 import database as db
-from models import Product, Category, CategoryClick, ProdClick, ProdAction, DBResult
-from utils.helper import handle_db_result   
+from models import Product, Category, CategoryAction, CategoryClick, ProdClick, ProdAction, DBResult
+from utils.helper import handle_db_result  
 #Создаем логгер
 from config import init_logging
 init_logging()
@@ -53,46 +53,58 @@ async def process_show_categories_feat(
         edit_msg_id: int = None
     ):
     logger.info("Выводим меню категории")
+
     db_result = await db.get_categories()
     builder = InlineKeyboardBuilder()
-    user_id = event.from_user.id
-    # Определяем, куда слать ответ (в callback или в новое сообщение)
-    chat_id = event.chat.id if isinstance(event, types.Message) else event.message.chat.id
+
+    # Унификация
+    if isinstance(event, types.CallbackQuery):
+        user_id = event.from_user.id
+        chat_id = event.message.chat.id
+        message = event.message
+        bot = event.bot
+    else:
+        user_id = event.from_user.id
+        chat_id = event.chat.id
+        message = event
+        bot = event.bot
+
     if isinstance(db_result, list):
-        # Строим клавиатуру со списком категорий                 
-        for cat in db_result:            
-        # Используем наш класс ProdClick или просто строку с ID
+        for cat in db_result:
             builder.row(InlineKeyboardButton(
                 text=cat.name,
                 callback_data=CategoryClick(category_id=cat.id).pack()
-            ))       
+            ))
         msg_text = "Выберете категорию:"
     else:
         msg_text = handle_db_result(db_result)
 
-    if user_id in ADMIN_IDS: #Если администратор    
-        builder.row(InlineKeyboardButton(text="➕ Добавить категорию", callback_data="cat_add"))
+    if user_id in ADMIN_IDS:
+        builder.row(InlineKeyboardButton(
+            text="➕ Добавить категорию",
+            callback_data="cat_add"
+        ))
 
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
 
     try:
         if edit_msg_id:
-            # Редактируем конкретное сообщение по ID
-            await event.bot.edit_message_text(
+            await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=edit_msg_id,
                 text=msg_text,
                 reply_markup=builder.as_markup()
             )
+
         elif isinstance(event, types.CallbackQuery):
-            # Если это нажатие кнопки "назад" из меню products — редактируем текущее сообщение кнопки
-            await event.message.edit_text(
+            await event.answer()
+
+            await message.edit_text(
                 text=msg_text,
                 reply_markup=builder.as_markup()
             )
         else:
-            # Если это просто текстовое сообщение — отправляем новое
-            await event.answer(
+            await message.answer(
                 text=msg_text,
                 reply_markup=builder.as_markup()
             )
@@ -138,6 +150,13 @@ async def send_catalog_view(callback: types.CallbackQuery, category_id: int):
                 action="add", 
                 id=0,           # товара еще нет, ставим 0
                 cat_id=category_id
+                ).pack()
+            ))
+        builder.row(InlineKeyboardButton(
+            text="📝 Переименовать категорию", 
+            callback_data=CategoryAction(
+                id=category_id,
+                action="edit"
                 ).pack()
             ))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="show_categories"))

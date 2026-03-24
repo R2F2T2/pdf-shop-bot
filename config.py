@@ -46,7 +46,7 @@ def init_logging():
     )
     # Отключаем DEBUG для сторонних библиотек
     logging.getLogger("aiogram").setLevel(logging.INFO)
-    logging.getLogger("aiosqlite").setLevel(logging.DEBUG)
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     
     return logging.getLogger(__name__)
